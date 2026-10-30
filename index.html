@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Prenda Lista</title>
+  <meta name="description" content="Prepara tus anuncios de Vinted: fotos con césped, título, descripción, estado y precio.">
+  <meta name="theme-color" content="#1f6f43">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Prenda Lista">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="title">Prenda Lista</h1>
+    <span id="topinfo" class="muted"></span>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="tabs" aria-label="Secciones">
+    <button data-tab="nueva" class="active"><span>＋</span>Nueva</button>
+    <button data-tab="prendas"><span>👕</span>Prendas</button>
+    <button data-tab="registro"><span>📊</span>Registro</button>
+    <button data-tab="mensajes"><span>💬</span>Mensajes</button>
+    <button data-tab="ajustes"><span>⚙️</span>Ajustes</button>
+  </nav>
+
+  <div id="toast" role="status"></div>
+  <dialog id="modal"><form method="dialog" id="modalForm"></form></dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
