@@ -75,7 +75,7 @@ function friendly(msg, status) {
   return msg || `Error ${status} de Gemini`;
 }
 
-export async function analyze(photos, known, settings) {
+export async function analyze(photos, known, settings, onRetry) {
   if (!settings.apiKey) throw new Error('Falta la clave de Gemini. Ponla en Ajustes.');
   const picks = photos.slice(0, 8);
   const parts = [{ text: INSTRUCCIONES }];
@@ -93,16 +93,53 @@ export async function analyze(photos, known, settings) {
   ].filter(Boolean);
   parts.push({ text: datos.length ? `Datos que da el vendedor:\n${datos.join('\n')}` : 'El vendedor no ha añadido datos extra.' });
 
-  const res = await fetch(`${API}/models/${encodeURIComponent(settings.model)}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.apiKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.4 },
-    }),
+  const payload = JSON.stringify({
+    contents: [{ role: 'user', parts }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.4 },
   });
+
+  // Si el modelo elegido está saturado, tarda demasiado o ya no existe, se prueba el siguiente.
+  const models = [...new Set([settings.model, ...FALLBACK_MODELS])];
+  let lastError;
+  for (const model of models) {
+    try {
+      return await generate(model, payload, settings.apiKey);
+    } catch (e) {
+      lastError = e;
+      if (!e.retry) throw e;
+      onRetry?.(model);
+    }
+  }
+  throw lastError;
+}
+
+const FALLBACK_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest'];
+const TIMEOUT_MS = 45000;
+
+async function generate(model, payload, apiKey) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: payload,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    const err = new Error(e.name === 'AbortError' ? 'Gemini tarda demasiado. Prueba otra vez en un rato.' : 'Sin conexión con Gemini. Revisa tu internet.');
+    err.retry = e.name === 'AbortError';
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(friendly(body.error?.message, res.status));
+  if (!res.ok) {
+    const err = new Error(friendly(body.error?.message, res.status));
+    err.retry = res.status === 404 || res.status === 429 || res.status >= 500;
+    throw err;
+  }
   const text = (body.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
   if (!text) throw new Error('Gemini no devolvió respuesta (' + (body.candidates?.[0]?.finishReason || 'sin motivo') + ')');
   return JSON.parse(text);
