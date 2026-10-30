@@ -12,18 +12,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Prenda Lista">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
-    <h1 id="title">Prenda Lista</h1>
+    <div class="brand"><img class="logo" src="icons/icon-192.png" alt=""><h1 id="title">Prenda Lista</h1></div>
     <span id="topinfo" class="muted"></span>
   </header>
 
   <main id="view" aria-live="polite"></main>
 
   <nav class="tabs" aria-label="Secciones">
-    <button data-tab="nueva" class="active"><span>＋</span>Nueva</button>
+    <button data-tab="nueva" class="active"><span>➕</span>Nueva</button>
     <button data-tab="prendas"><span>👕</span>Prendas</button>
     <button data-tab="registro"><span>📊</span>Registro</button>
     <button data-tab="mensajes"><span>💬</span>Mensajes</button>
