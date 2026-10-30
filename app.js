@@ -1,6 +1,7 @@
 import { saveItem, deleteItem, getItem, allItems, loadSettings, storeSettings, DEFAULTS } from './js/db.js';
 import { cutout, composeOnGrass, resize } from './js/images.js';
 import { analyze, listModels, ESTADOS } from './js/ai.js';
+import { startAppleEmoji } from './js/emoji.js';
 
 // ---------- utilidades ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -179,7 +180,7 @@ function renderEditor(v) {
   const it = cur;
   const f = it.ficha;
   $('#title').textContent = it.status === 'borrador' ? 'Nueva prenda' : 'Editar prenda';
-  $('#topinfo').innerHTML = `<button class="btn sm" data-act="new">＋ Otra</button>`;
+  $('#topinfo').innerHTML = `<button class="btn sm" data-act="new">➕ Otra</button>`;
   const estadoOpts = ['', ...ESTADOS].map((e) => `<option ${e === f.estado ? 'selected' : ''} value="${esc(e)}">${e || 'Elige estado'}</option>`).join('');
   const paqOpts = ['Pequeño', 'Mediano', 'Grande'].map((p) => `<option ${p === f.paquete ? 'selected' : ''}>${p}</option>`).join('');
   const inp = (path, label, ph = '') => `<div><label>${label}</label><input data-bind="${path}" value="${esc(getPath(it, path))}" placeholder="${esc(ph)}"></div>`;
@@ -290,7 +291,7 @@ function renderPhotos() {
             <button data-act="rm" data-i="${i}" aria-label="Quitar">✕</button>
             <button data-act="mv" data-i="${i}" data-d="1" aria-label="Mover después">▶</button>
           </div></div>`).join('')}</div>`
-    : '<p class="empty" style="padding:16px">Aún no hay fotos</p>';
+    : '<div class="photo-empty"><span class="big">📸</span>Aún no hay fotos de esta prenda</div>';
   const aiBtn = $('[data-act="ai"]');
   if (aiBtn) aiBtn.disabled = !n;
 }
@@ -472,7 +473,7 @@ async function renderList(v) {
   v.innerHTML = `
     <div class="filters">${Object.keys(names).map((k) => `<button class="btn sm ${k === filter ? 'on' : ''}" data-act="filter" data-f="${k}">${names[k]} (${counts[k]})</button>`).join('')}</div>
     ${filter === 'borrador' && counts.borrador ? `<p class="muted">Publica en tandas de 3 seguidas, repartidas en el día (mañana, mediodía, tarde-noche). Hoy llevas ${pubToday} de ${settings.dailyGoal}.</p>` : ''}
-    <div class="list">${shown.length ? shown.map(itemCard).join('') : `<p class="empty">No hay prendas en "${names[filter]}"</p>`}</div>`;
+    <div class="list">${shown.length ? shown.map(itemCard).join('') : `<p class="empty"><span class="big">${{ borrador: '🧺', publicado: '🏷️', vendido: '💸' }[filter]}</span>No hay prendas en "${names[filter]}"</p>`}</div>`;
 }
 
 function itemCard(i) {
@@ -513,12 +514,13 @@ async function renderRecord(v) {
 
   v.innerHTML = `
     <div class="stats">
-      <div class="stat"><b>${eur(benefit)}</b><span>Beneficio total</span></div>
+      <div class="stat hero"><b>${eur(benefit)}</b><span>💰 Beneficio total</span></div>
       <div class="stat"><b>${eur(soldMonth.reduce((s, i) => s + profit(i), 0))}</b><span>Beneficio este mes</span></div>
       <div class="stat"><b>${sold.length}</b><span>Vendidas (${soldMonth.length} este mes)</span></div>
       <div class="stat"><b>${onSale.length}</b><span>En venta</span></div>
       <div class="stat"><b>${eur(income)}</b><span>Ingresos</span></div>
       <div class="stat"><b>${eur(invested)}</b><span>Invertido en prendas</span></div>
+      <div class="stat"><b>${sold.length ? eur(benefit / sold.length) : '—'}</b><span>Beneficio medio por prenda</span></div>
     </div>
     ${stuck.length ? `<div class="alert" style="margin-bottom:14px">${stuck.length} prenda${stuck.length > 1 ? 's llevan' : ' lleva'} 3 semanas o más sin venderse (${eur(stuck.reduce((s, i) => s + (num(i.price.coste) || 0), 0))} parados). Revisa fotos y título y baja el precio poco a poco.</div>` : ''}
     <section class="card">
@@ -763,6 +765,8 @@ let installEvt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+startAppleEmoji();
 
 // Si no hay clave, abre los ajustes la primera vez.
 if (!settings.apiKey) { tab = 'ajustes'; $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab)); }
