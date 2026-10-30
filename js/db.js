@@ -34,7 +34,7 @@ export async function allItems() {
 
 export const DEFAULTS = {
   apiKey: '',
-  model: 'gemini-flash-latest',
+  model: 'gemini-3.6-flash',
   shopName: '',
   shipLine: '🚚 Envío el mismo día',
   lotDiscount: true,
@@ -50,7 +50,10 @@ export const DEFAULTS = {
 
 export function loadSettings() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') };
+    const s = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('settings') || '{}') };
+    // gemini-flash-latest apunta a un modelo recién salido que va saturado: se cambia por el estable.
+    if (s.model === 'gemini-flash-latest' || s.model === 'gemini-2.5-flash') s.model = DEFAULTS.model;
+    return s;
   } catch {
     return { ...DEFAULTS };
   }
