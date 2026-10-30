@@ -1,7 +1,7 @@
 // Guarda la app y el modelo de recorte para que funcione sin conexión (Gemini sí necesita internet).
-const VERSION = 'v1';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'js/db.js', 'js/images.js', 'js/ai.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
-const RUNTIME_HOSTS = ['cdn.jsdelivr.net', 'staticimgly.com'];
+const VERSION = 'v2';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'js/db.js', 'js/images.js', 'js/ai.js', 'js/emoji.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const RUNTIME_HOSTS = ['cdn.jsdelivr.net', 'staticimgly.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open('shell-' + VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
