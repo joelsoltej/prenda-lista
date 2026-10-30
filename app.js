@@ -383,7 +383,9 @@ async function runAI() {
   btn.disabled = true;
   st.innerHTML = '<p class="muted"><span class="spin"></span> Analizando las fotos con Gemini...</p>';
   try {
-    const r = await analyze(cur.photos, cur.known, settings);
+    const r = await analyze(cur.photos, cur.known, settings, (model) => {
+      st.innerHTML = `<p class="muted"><span class="spin"></span> ${esc(model)} está saturado, probando con otro modelo...</p>`;
+    });
     applyAI(r);
     await saveItem(cur);
     renderEditor($('#view'));
