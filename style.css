@@ -153,8 +153,17 @@ label.btn.primary { color: #fff; }
 .ph .tag {
   position: absolute; left: 6px; top: 6px; background: rgba(20, 20, 15, .55); color: #fff;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
-  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; padding: 3px 6px; border-radius: 999px;
 }
+.grass-toggle {
+  position: absolute; right: 4px; top: 4px; width: 30px; height: 30px; padding: 0; font-size: 12px;
+  display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; background: rgba(20, 20, 15, .55);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.grass-toggle .emo { filter: grayscale(1); opacity: .75; }
+.grass-toggle.on { background: #fff; border-color: var(--accent-2); }
+.grass-toggle.on .emo { filter: none; opacity: 1; }
 .ph .ctrls { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 6px; }
 .ph .ctrls button {
   border: 0; width: 30px; height: 30px; border-radius: 10px; background: rgba(20, 20, 15, .55); color: #fff; font-size: 13px;
