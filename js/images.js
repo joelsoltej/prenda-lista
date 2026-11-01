@@ -1,10 +1,12 @@
 // Tratamiento de imágenes: redimensionar, recortar la prenda y montarla sobre césped artificial.
 
 const BG_LIB = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm';
+const GRASS_FILES = ['img/grass-1.jpg', 'img/grass-2.jpg'];
 export const COVER_W = 1200;
 export const COVER_H = 1600; // 3:4, el formato vertical de Vinted
 
 let bgLib;
+const grassImages = new Map();
 
 export function loadImage(blob) {
   return new Promise((resolve, reject) => {
@@ -48,47 +50,38 @@ export async function cutout(blob, onProgress) {
   });
 }
 
-// Césped artificial visto desde arriba: hojas cortas en direcciones aleatorias sobre una base verde.
-export function grassTexture(w = COVER_W, h = COVER_H, seed = Math.random() * 1e9) {
-  let x = seed % 2147483647 || 1;
-  const rnd = () => ((x = (x * 16807) % 2147483647) - 1) / 2147483646;
-
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  const g = c.getContext('2d');
-  g.fillStyle = '#2f6b27';
-  g.fillRect(0, 0, w, h);
-
-  const blades = Math.round((w * h) / 26);
-  g.lineCap = 'round';
-  for (let i = 0; i < blades; i++) {
-    const bx = rnd() * w, by = rnd() * h;
-    const len = 9 + rnd() * 16;
-    const a = rnd() * Math.PI * 2;
-    const hue = 92 + rnd() * 26;
-    const light = 22 + rnd() * 26 + (i / blades) * 8; // las de arriba más claras, da volumen
-    g.strokeStyle = `hsl(${hue} ${42 + rnd() * 22}% ${light}%)`;
-    g.lineWidth = 1.4 + rnd() * 1.8;
-    g.beginPath();
-    g.moveTo(bx, by);
-    g.quadraticCurveTo(
-      bx + Math.cos(a + 0.4) * len * 0.5, by + Math.sin(a + 0.4) * len * 0.5,
-      bx + Math.cos(a) * len, by + Math.sin(a) * len,
-    );
-    g.stroke();
+async function grassImage(file) {
+  if (!grassImages.has(file)) {
+    const res = await fetch(file);
+    if (!res.ok) throw new Error('No se pudo cargar el césped');
+    grassImages.set(file, await loadImage(await res.blob()));
   }
+  return grassImages.get(file);
+}
 
-  // Luz suave en el centro y bordes algo más oscuros, como una foto real.
-  const v = g.createRadialGradient(w / 2, h * 0.45, Math.min(w, h) * 0.2, w / 2, h / 2, Math.max(w, h) * 0.75);
-  v.addColorStop(0, 'rgba(255,255,230,0.07)');
-  v.addColorStop(1, 'rgba(0,20,0,0.35)');
-  g.fillStyle = v;
-  g.fillRect(0, 0, w, h);
+// Césped real sacado de una foto. Hay 8 variantes: 2 texturas, volteadas en horizontal y en vertical.
+async function grassTexture(variant) {
+  const v = Math.abs(Math.trunc(variant)) % 8;
+  const img = await grassImage(GRASS_FILES[v & 1]);
+  const c = document.createElement('canvas');
+  c.width = COVER_W; c.height = COVER_H;
+  const g = c.getContext('2d');
+  g.translate(v & 2 ? COVER_W : 0, v & 4 ? COVER_H : 0);
+  g.scale(v & 2 ? -1 : 1, v & 4 ? -1 : 1);
+  g.drawImage(img, 0, 0, COVER_W, COVER_H);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+
+  // Bordes un poco más oscuros, como en una foto real.
+  const shade = g.createRadialGradient(COVER_W / 2, COVER_H * 0.45, COVER_H * 0.3, COVER_W / 2, COVER_H / 2, COVER_H * 0.8);
+  shade.addColorStop(0, 'rgba(0,20,0,0)');
+  shade.addColorStop(1, 'rgba(0,20,0,0.22)');
+  g.fillStyle = shade;
+  g.fillRect(0, 0, COVER_W, COVER_H);
   return c;
 }
 
-// Caja que encierra los píxeles visibles del recorte, para centrar la prenda.
-function alphaBounds(img) {
+// Lee la transparencia del recorte: la caja que encierra la prenda y qué parte de la foto era fondo.
+function alphaInfo(img) {
   const k = Math.min(1, 400 / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.max(1, Math.round(img.naturalWidth * k));
   const h = Math.max(1, Math.round(img.naturalHeight * k));
@@ -97,23 +90,33 @@ function alphaBounds(img) {
   const g = c.getContext('2d', { willReadFrequently: true });
   g.drawImage(img, 0, 0, w, h);
   const d = g.getImageData(0, 0, w, h).data;
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1, visible = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (d[(y * w + x) * 4 + 3] > 24) {
+        visible++;
         if (x < x0) x0 = x; if (x > x1) x1 = x;
         if (y < y0) y0 = y; if (y > y1) y1 = y;
       }
     }
   }
-  if (x1 < 0) return { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
-  return { x: x0 / k, y: y0 / k, w: (x1 - x0 + 1) / k, h: (y1 - y0 + 1) / k };
+  const bounds = x1 < 0
+    ? { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight }
+    : { x: x0 / k, y: y0 / k, w: (x1 - x0 + 1) / k, h: (y1 - y0 + 1) / k };
+  return { bounds, backgroundShare: 1 - visible / (w * h) };
 }
 
-export async function composeOnGrass(cutoutBlob, { scale = 0.84, seed } = {}) {
+// En un primer plano la prenda llena el encuadre: no hay fondo que cambiar y el recorte, además, se suele
+// comer el tejido y deja solo un trozo. Por eso, si queda menos del 25 % de la foto, se deja la original.
+export async function hasBackground(cutoutBlob) {
+  const { backgroundShare } = alphaInfo(await loadImage(cutoutBlob));
+  return backgroundShare > 0.05 && backgroundShare < 0.75;
+}
+
+export async function composeOnGrass(cutoutBlob, { scale = 0.84, variant = 0 } = {}) {
   const img = await loadImage(cutoutBlob);
-  const b = alphaBounds(img);
-  const canvas = grassTexture(COVER_W, COVER_H, seed);
+  const b = alphaInfo(img).bounds;
+  const canvas = await grassTexture(variant);
   const g = canvas.getContext('2d');
   const k = Math.min((COVER_W * scale) / b.w, (COVER_H * scale) / b.h);
   const dw = b.w * k, dh = b.h * k;
