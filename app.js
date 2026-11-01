@@ -1,5 +1,5 @@
 import { saveItem, deleteItem, getItem, allItems, loadSettings, storeSettings, DEFAULTS } from './js/db.js';
-import { cutout, composeOnGrass, resize } from './js/images.js';
+import { cutout, composeOnGrass, hasBackground, resize } from './js/images.js';
 import { analyze, listModels, ESTADOS } from './js/ai.js';
 import { startAppleEmoji } from './js/emoji.js';
 
@@ -67,9 +67,8 @@ function newItem() {
     created: Date.now(),
     status: 'borrador',
     photos: [],
-    cutout: null,
-    cover: null,
-    useCover: true,
+    grass: [],        // por foto (mismo índice): { cutout, img, on } o { noBg: true }
+    grassVariant: Math.floor(Math.random() * 8),
     known: { marca: '', talla: '', material: '', pais: '', defectos: '', notas: '' },
     ai: null,
     title: '',
@@ -86,11 +85,19 @@ function newItem() {
   };
 }
 
-// Fotos en el orden en que se suben a Vinted: portada con césped (si está activada) y después las reales.
+// Las prendas guardadas antes de poder poner césped a todas tenían una sola portada.
+function normalizeItem(it) {
+  if (!it.grass) {
+    it.grass = it.cover ? [{ cutout: it.cutout, img: it.cover, on: it.useCover }] : [];
+    it.grassVariant = Math.floor(Math.random() * 8);
+    delete it.cover; delete it.cutout; delete it.useCover;
+  }
+  return it;
+}
+
+// Fotos en el orden en que se suben a Vinted, cada una con césped si lo tiene activado.
 function exportPhotos(it) {
-  const rest = it.photos.slice(1);
-  const first = it.cover && it.useCover ? it.cover : it.photos[0];
-  return first ? [first, ...rest] : [];
+  return it.photos.map((p, i) => (it.grass[i]?.on && it.grass[i].img) || p);
 }
 
 function buildDescription(it) {
@@ -197,8 +204,8 @@ function renderEditor(v) {
   </section>
 
   <section class="card">
-    <h2><span class="step">2</span>Portada con césped</h2>
-    <p class="muted">Se recorta la prenda de la foto principal y se pone sobre césped artificial. Las demás fotos se suben tal cual, para que se vea el estado real.</p>
+    <h2><span class="step">2</span>Fondo de césped</h2>
+    <p class="muted">Se recorta la prenda y se pone sobre césped artificial. Elige si lo quieres solo en la portada o en todas las fotos. Las que no tengan fondo se quedan como están.</p>
     <div id="cover"></div>
   </section>
 
@@ -283,9 +290,10 @@ function renderPhotos() {
   if (!el) return;
   const n = cur.photos.length;
   el.innerHTML = n
-    ? `<div class="photos">${cur.photos.map((p, i) => `
+    ? `<div class="photos">${exportPhotos(cur).map((p, i) => `
         <div class="ph"><img src="${urlOf(p)}" alt="Foto ${i + 1}">
-          <span class="tag">${i === 0 ? 'Principal' : i === n - 1 && n > 2 ? 'Medidas?' : i + 1}</span>
+          <span class="tag">${i === 0 ? 'Portada' : i === n - 1 && n > 2 ? 'Metro?' : i + 1}</span>
+          <button class="grass-toggle ${cur.grass[i]?.on ? 'on' : ''}" data-act="grassone" data-i="${i}" aria-pressed="${!!cur.grass[i]?.on}" aria-label="Césped en la foto ${i + 1}">🌱</button>
           <div class="ctrls">
             <button data-act="mv" data-i="${i}" data-d="-1" aria-label="Mover antes">◀</button>
             <button data-act="rm" data-i="${i}" aria-label="Quitar">✕</button>
@@ -304,17 +312,24 @@ function renderCover(progress) {
     el.innerHTML = `<p class="muted"><span class="spin"></span> ${esc(progress.text)}</p><div class="progress"><div style="width:${progress.pct}%"></div></div>`;
     return;
   }
-  el.innerHTML = cur.cover
-    ? `<div class="cover-preview">
-         <figure><img src="${urlOf(cur.photos[0])}" alt="Original"><figcaption>Original</figcaption></figure>
-         <figure><img src="${urlOf(cur.cover)}" alt="Con césped"><figcaption>Con césped</figcaption></figure>
+  const total = cur.photos.length;
+  const onCount = cur.photos.filter((_, i) => cur.grass[i]?.on).length;
+  const first = cur.photos.findIndex((_, i) => cur.grass[i]?.on);
+  el.innerHTML = `
+    <div class="btns">
+      <button class="btn primary" data-act="grassmode" data-m="cover">🌱 Solo portada</button>
+      <button class="btn primary" data-act="grassmode" data-m="all">🌱 Todas las fotos</button>
+    </div>
+    <p class="muted small" style="margin-top:10px">Césped en ${onCount} de ${total} foto${total > 1 ? 's' : ''}. Toca el 🌱 de cada foto para elegir una a una.</p>
+    ${first < 0
+    ? '<p class="muted small">La primera vez descarga el modelo de recorte (~40 MB, mejor con wifi). Después funciona sin conexión.</p>'
+    : `<div class="cover-preview">
+         <figure><img src="${urlOf(cur.photos[first])}" alt="Original"><figcaption>Original</figcaption></figure>
+         <figure><img src="${urlOf(cur.grass[first].img)}" alt="Con césped"><figcaption>Con césped</figcaption></figure>
        </div>
-       <label class="check" style="margin-top:10px"><input type="checkbox" data-act="usecover" ${cur.useCover ? 'checked' : ''}> Usar la de césped como portada</label>
        <label>Tamaño de la prenda</label><input type="range" min="0.6" max="0.96" step="0.02" value="${settings.grassScale}" data-act="scale">
-       <div class="btns"><button class="btn sm" data-act="regrass">🌱 Otro césped</button><button class="btn sm" data-act="cutout">↻ Recortar de nuevo</button></div>
-       <p class="muted small">Compara las dos: si el recorte se ha comido parte de la prenda o cambia algo, usa la original.</p>`
-    : `<button class="btn primary block" data-act="cutout">🌱 Poner césped a la portada</button>
-       <p class="muted small">La primera vez descarga el modelo de recorte (~40 MB, mejor con wifi). Después funciona sin conexión.</p>`;
+       <div class="btns"><button class="btn sm" data-act="regrass" data-new="1">🌱 Otro césped</button><button class="btn sm" data-act="grassmode" data-m="none">Quitar césped</button></div>
+       <p class="muted small">Revisa cada foto: si el recorte se come parte de la prenda o tapa un defecto, quítale el césped. Deja siempre alguna foto real para que se vea el estado.</p>`}`;
 }
 
 // Actualiza lo que depende de otros campos sin redibujar el editor (para no perder el foco).
@@ -397,30 +412,89 @@ async function runAI() {
   }
 }
 
-async function runCutout() {
-  const labels = { fetch: 'Descargando modelo de recorte', compute: 'Recortando la prenda' };
-  renderCover({ text: 'Preparando...', pct: 2 });
+let grassBusy = false;
+
+// Cada foto usa una variante distinta del césped para que no se repita el mismo dibujo.
+const grassOptions = (it, i) => ({ scale: settings.grassScale, variant: it.grassVariant + i });
+
+// Mientras se recorta, las fotos no se pueden mover ni quitar porque el césped va por índice.
+async function grassWork(fn) {
+  if (grassBusy) { toast('Espera a que termine el recorte'); return; }
+  grassBusy = true;
+  const it = cur;
   try {
-    cur.cutout = await cutout(cur.photos[0], (key, c, t) => {
-      const kind = key.startsWith('fetch') ? 'fetch' : 'compute';
-      renderCover({ text: labels[kind] + '...', pct: t ? Math.round((c / t) * 100) : 50 });
-    });
-    renderCover({ text: 'Poniendo el césped...', pct: 100 });
-    cur.cover = await composeOnGrass(cur.cutout, { scale: settings.grassScale });
-    cur.useCover = true;
-    saveSoon();
+    await fn(it);
   } catch (e) {
     console.error(e);
-    toast('No se pudo recortar: ' + e.message, 4000);
+    toast('No se pudo poner el césped: ' + e.message, 4000);
   }
+  grassBusy = false;
+  await saveItem(it);
+  if (cur === it) { renderPhotos(); renderCover(); }
+}
+
+function applyGrass(indices) {
+  return grassWork(async (it) => {
+    let sinFondo = 0;
+    for (const [n, i] of indices.entries()) {
+      const g = it.grass[i];
+      if (g?.img) { g.on = true; continue; }
+      if (g?.noBg) { sinFondo++; continue; }
+      const label = indices.length > 1 ? `Foto ${n + 1} de ${indices.length}: ` : '';
+      const progress = (text, part) => {
+        if (cur === it) renderCover({ text: label + text, pct: Math.round(((n + part) / indices.length) * 100) });
+      };
+      progress('recortando la prenda...', 0.05);
+      const cut = await cutout(it.photos[i], (key, c, t) => {
+        if (key.startsWith('fetch')) progress('descargando el modelo de recorte...', t ? (c / t) * 0.5 : 0.1);
+        else progress('recortando la prenda...', 0.5 + (t ? (c / t) * 0.4 : 0.2));
+      });
+      if (!(await hasBackground(cut))) {
+        it.grass[i] = { noBg: true };
+        sinFondo++;
+        continue;
+      }
+      progress('poniendo el césped...', 0.95);
+      it.grass[i] = { cutout: cut, img: await composeOnGrass(cut, grassOptions(it, i)), on: true };
+      if (cur === it) renderPhotos();
+    }
+    if (sinFondo) toast(`${sinFondo} foto${sinFondo > 1 ? 's' : ''} sin fondo que cambiar: se queda${sinFondo > 1 ? 'n' : ''} como está${sinFondo > 1 ? 'n' : ''}`, 3500);
+  });
+}
+
+function grassMode(mode) {
+  const all = cur.photos.map((_, i) => i);
+  if (mode === 'all') return applyGrass(all);
+  if (mode === 'cover') {
+    all.slice(1).forEach((i) => { if (cur.grass[i]?.img) cur.grass[i].on = false; });
+    return applyGrass([0]);
+  }
+  all.forEach((i) => { if (cur.grass[i]?.img) cur.grass[i].on = false; });
+  saveSoon();
+  renderPhotos();
   renderCover();
 }
 
-async function regrass() {
-  if (!cur.cutout) return runCutout();
-  cur.cover = await composeOnGrass(cur.cutout, { scale: settings.grassScale });
+function grassOne(i) {
+  const g = cur.grass[i];
+  if (g?.noBg) return toast('Esta foto no tiene fondo que cambiar');
+  if (!g?.img) return applyGrass([i]);
+  g.on = !g.on;
   saveSoon();
+  renderPhotos();
   renderCover();
+}
+
+// Vuelve a montar las fotos ya recortadas: con otro césped o con otro tamaño de prenda.
+function regrass(newVariant) {
+  return grassWork(async (it) => {
+    if (newVariant) it.grassVariant = (it.grassVariant + 1) % 8;
+    const done = it.photos.map((_, i) => i).filter((i) => it.grass[i]?.img);
+    for (const [n, i] of done.entries()) {
+      if (cur === it) renderCover({ text: 'Poniendo el césped...', pct: Math.round(((n + 1) / done.length) * 100) });
+      it.grass[i].img = await composeOnGrass(it.grass[i].cutout, grassOptions(it, i));
+    }
+  });
 }
 
 async function sharePhotos() {
@@ -451,9 +525,7 @@ async function addPhotos(fileList) {
   const files = [...fileList];
   if (!files.length) return;
   toast(`Añadiendo ${files.length} foto${files.length > 1 ? 's' : ''}...`);
-  const hadMain = cur.photos.length > 0;
   for (const f of files) cur.photos.push(await resize(f, 1600, 0.88));
-  if (!hadMain) { cur.cover = null; cur.cutout = null; }
   saveSoon();
   renderPhotos();
   renderCover();
@@ -479,7 +551,7 @@ async function renderList(v) {
 }
 
 function itemCard(i) {
-  const thumb = (i.cover && i.useCover ? i.cover : i.photos[0]);
+  const thumb = exportPhotos(normalizeItem(i))[0];
   const d = daysSince(i.publishedAt);
   const chips = [];
   if (i.price.final) chips.push(`<span class="chip">${esc(i.price.final)} €</span>`);
@@ -631,7 +703,7 @@ document.addEventListener('input', (e) => {
     settings.grassScale = parseFloat(el.value);
     storeSettings(settings);
     clearTimeout(el._t);
-    el._t = setTimeout(regrass, 250);
+    el._t = setTimeout(() => regrass(false), 250);
   }
 });
 
@@ -639,7 +711,6 @@ document.addEventListener('change', async (e) => {
   const el = e.target;
   const act = el.dataset.act;
   if (act === 'addphotos') { await addPhotos(el.files); el.value = ''; }
-  if (act === 'usecover') { cur.useCover = el.checked; saveSoon(); }
   if (act === 'msgitem') renderMessages($('#view'), el.value);
   if (el.dataset.set && el.type === 'checkbox') { settings[el.dataset.set] = el.checked; storeSettings(settings); }
 });
@@ -652,18 +723,21 @@ document.addEventListener('click', async (e) => {
   const act = el.dataset.act;
 
   if (act === 'mv') {
+    if (grassBusy) return toast('Espera a que termine el recorte');
     const i = +el.dataset.i, j = i + +el.dataset.d;
     if (j < 0 || j >= cur.photos.length) return;
     [cur.photos[i], cur.photos[j]] = [cur.photos[j], cur.photos[i]];
-    if (i === 0 || j === 0) { cur.cover = null; cur.cutout = null; renderCover(); }
-    saveSoon(); renderPhotos();
+    [cur.grass[i], cur.grass[j]] = [cur.grass[j], cur.grass[i]];
+    saveSoon(); renderPhotos(); renderCover();
   } else if (act === 'rm') {
+    if (grassBusy) return toast('Espera a que termine el recorte');
     const i = +el.dataset.i;
     cur.photos.splice(i, 1);
-    if (i === 0) { cur.cover = null; cur.cutout = null; renderCover(); }
-    saveSoon(); renderPhotos(); refreshDerived();
-  } else if (act === 'cutout') runCutout();
-  else if (act === 'regrass') regrass();
+    cur.grass.splice(i, 1);
+    saveSoon(); renderPhotos(); renderCover(); refreshDerived();
+  } else if (act === 'grassmode') grassMode(el.dataset.m);
+  else if (act === 'grassone') grassOne(+el.dataset.i);
+  else if (act === 'regrass') regrass(el.dataset.new === '1');
   else if (act === 'ai') runAI();
   else if (act === 'rebuild') {
     cur.descEdited = false;
@@ -711,7 +785,7 @@ document.addEventListener('click', async (e) => {
     filter = el.dataset.f;
     render();
   } else if (act === 'open') {
-    const it = await getItem(el.dataset.id);
+    const it = normalizeItem(await getItem(el.dataset.id));
     if (it.status === 'publicado') return openPublished(it);
     cur = it;
     go('nueva');
